@@ -1,7 +1,7 @@
 Climate Intelligence Assistant
 An AI-powered web application designed to combat climate misinformation by analyzing the source and content of news articles. This project uses a fine-tuned ClimateBERT model for source classification and integrates Google's Gemini API for advanced, real-time content analysis.
 
-(Pro-tip: Take a screenshot of your working demo, upload it to a site like imgur.com, and paste the link here to make your repository visually appealing.)
+
 
 🚀 Core Features
 State-of-the-Art Source Classification: Utilizes a ClimateBERT model, fine-tuned on a custom, expanded dataset, to predict the nature of an article's source (science, news, junksci, conspiracy) with high accuracy and a confidence score.
