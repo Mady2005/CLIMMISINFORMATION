@@ -45,3 +45,9 @@ Inference: The Gradio application loads the model from the Hub and serves a user
 It gets a quick classification from the local ClimateBERT model.
 
 It makes live API calls to Google's Gemini for deeper, generative analysis.
+
+## 🚀 Project Demo
+
+Check out a full video walkthrough of this project on YouTube:
+
+[**Watch the Video Demo Here**]## https://youtu.be/Vd7hIjyC0o4
