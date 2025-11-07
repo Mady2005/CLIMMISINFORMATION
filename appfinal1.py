@@ -92,7 +92,7 @@ iface = gr.Interface(
 
 # --- 5. Launch the App ---
 if __name__ == "__main__":
-    iface.launch()
+    iface.launch(share=True)
 
     
 

@@ -1,0 +1,9 @@
+
+--find-links https://www.google.com/url?sa=E&source=gmail&q=https://download.pytorch.org/whl/torch_stable.html
+torch
+transformers
+streamlit
+google-generativeai
+scikit-learn
+pandas
+

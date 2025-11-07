@@ -1,0 +1,8 @@
+# Ignore all zip archives
+*.zip
+
+# Python temporary files
+__pycache__/
+*.pyc
+
+
