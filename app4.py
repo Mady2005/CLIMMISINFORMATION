@@ -104,7 +104,9 @@ if st.button("Analyze Content", use_container_width=True, type="primary"):
 
                 # --- 2. Configure and Call Gemini API ---
                 genai.configure(api_key=gemini_api_key)
-                model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
+                
+                # UPDATED MODEL NAME HERE
+                model = genai.GenerativeModel('gemini-1.5-flash') 
                 
                 # Create a clear prompt for the LLM
                 prompt = f"""
@@ -123,4 +125,4 @@ if st.button("Analyze Content", use_container_width=True, type="primary"):
 
             except Exception as e:
                 st.error(f"An error occurred during analysis: {e}")
-                st.error("Please check your API key and try again.")
+                st.error("Please check your API key and try again.") 
