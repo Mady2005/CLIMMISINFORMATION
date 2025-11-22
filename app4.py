@@ -63,49 +63,25 @@ if st.button("Analyze Content", type="primary"):
                 col1.metric("Predicted Source", label.upper())
                 col2.metric("Confidence", f"{score:.2%}")
 
-                # 2. Gemini Call (Diagnostic Mode)
+                # 2. Gemini Call (Using YOUR specific models)
                 genai.configure(api_key=gemini_api_key)
                 
                 model = None
-                # Extended list of potential names
-                model_options = [
-                    'gemini-1.5-flash', 
-                    'gemini-1.5-flash-001',
-                    'gemini-1.5-pro',
-                    'gemini-1.5-pro-001', 
-                    'gemini-1.0-pro', 
-                    'gemini-pro'
-                ]
+                # These are the exact models from your list
+                model_options = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-flash-latest']
                 
-                # Try to find a working model
                 for name in model_options:
                     try:
                         test_model = genai.GenerativeModel(name)
-                        test_model.generate_content("Hello")
+                        test_model.generate_content("Hello") 
                         model = test_model
-                        # st.success(f"Connected to {name}") # Uncomment for debug
+                        print(f"✅ Connected to {name}")
                         break 
                     except:
                         continue
                 
                 if model is None:
-                    st.error("❌ Connection Failed. Listing AVAILABLE models for your key:")
-                    
-                    # --- DIAGNOSTIC: List all available models ---
-                    try:
-                        available_models = []
-                        for m in genai.list_models():
-                            if 'generateContent' in m.supported_generation_methods:
-                                available_models.append(m.name)
-                        
-                        if available_models:
-                            st.json(available_models)
-                            st.info("👉 Please tell me one of the names listed above.")
-                        else:
-                            st.error("No text generation models found for this API key.")
-                    except Exception as e:
-                        st.error(f"Could not list models: {e}")
-                        
+                    st.error("Could not connect to Gemini. Please check your API Key.")
                 else:
                     prompt = f"""
                     The article is classified as '{label}' ({score:.0%} confidence).
