@@ -5,124 +5,117 @@ import zipfile
 import re
 import google.generativeai as genai
 
-# --- Auto-Unzip Logic for Deployment ---
-# This is the folder name that is INSIDE the zip file
+# --- Auto-Unzip Logic ---
 model_folder = 'climatebert_model' 
-# This is the zip file we uploaded to GitHub
 zip_archive = 'climatebert_model_archive.zip' 
 
-# This runs ONCE when the app starts in the cloud
 if not os.path.exists(model_folder) and os.path.exists(zip_archive):
     print(f"'{model_folder}' not found. Unzipping '{zip_archive}'...")
     with zipfile.ZipFile(zip_archive, 'r') as zip_ref:
-        zip_ref.extractall('.') # Unzip to the current directory
+        zip_ref.extractall('.')
     print("✅ Model unzipped successfully!")
-# ---
 
 # --- Model Loading ---
-# We cache the model so it only loads once
 @st.cache_resource
 def load_classifier():
-    """Loads the fine-tuned ClimateBERT pipeline from the unzipped folder."""
-    
-    # Check if the unzipped folder exists
     if not os.path.exists(model_folder):
         st.error(f"Error: Model folder '{model_folder}' not found.")
-        st.error("This can happen during the first boot. The app will restart in a moment.")
-        st.error("If this persists, please check 'climatebert_model_archive.zip' is in the GitHub repo.")
         return None
-        
     try:
-        # Load the model from the folder
-        classifier = pipeline(
-            "text-classification",
-            model=model_folder,
-            tokenizer=model_folder
-        )
-        print("✅ Model loaded successfully!")
+        classifier = pipeline("text-classification", model=model_folder, tokenizer=model_folder)
         return classifier
     except Exception as e:
-        st.error(f"Error loading model from folder: {e}")
+        st.error(f"Error loading model: {e}")
         return None
 
-# --- Page Configuration (Set up the browser tab) ---
-st.set_page_config(
-    page_title="Climate Intelligence Assistant",
-    page_icon="🌍",
-    layout="wide"
-)
+# --- Page Config ---
+st.set_page_config(page_title="Climate Intelligence Assistant", page_icon="🌍", layout="wide")
 
-# --- Sidebar for API Key ---
+# --- Sidebar ---
 st.sidebar.header("Configuration")
-gemini_api_key = st.sidebar.text_input(
-    "Enter your Google Gemini API Key",
-    type="password",
-    help="Get your free key from [Google AI Studio](https://aistudio.google.com/app/apikey)"
-)
+gemini_api_key = st.sidebar.text_input("Enter Google Gemini API Key", type="password")
 
-# --- Main Page UI ---
+# --- Main UI ---
 st.title("🌍 Climate Intelligence Assistant")
-st.write("An AI-powered tool to analyze climate-related text for source credibility and provide generative AI explanations.")
+st.write("An AI-powered tool to analyze climate-related text.")
 
-# Load the model
 classifier = load_classifier()
+if classifier is None: st.stop()
 
-# If the model fails to load, stop the app.
-if classifier is None:
-    st.stop()
+article_title = st.text_input("Article Title")
+article_text = st.text_area("Article Text", height=250)
 
-# --- Input Fields ---
-article_title = st.text_input("Article Title", placeholder="Enter article title here...")
-article_text = st.text_area("Article Text", placeholder="Paste article text here...", height=250)
-
-# --- Analyze Button ---
-if st.button("Analyze Content", use_container_width=True, type="primary"):
-    
-    # --- Input Validation ---
+if st.button("Analyze Content", type="primary"):
     if not article_title and not article_text:
-        st.warning("Please enter a title or some text to analyze.")
+        st.warning("Please enter text.")
     elif not gemini_api_key:
-        st.warning("Please enter your Gemini API Key in the sidebar to get AI explanations.")
+        st.warning("Please enter API Key.")
     else:
-        # Show a loading spinner while processing
-        with st.spinner("Analyzing... This may take a moment."):
+        with st.spinner("Analyzing..."):
             try:
-                # --- 1. Run ClimateBERT Classification ---
-                combined_text = f"{article_title} {re.sub(re.compile('<.*?>'), '', article_text)}"
+                # 1. Classification
+                combined_text = f"{article_title} {re.sub(r'<.*?>', '', article_text)}"
                 prediction = classifier(combined_text)[0]
                 label = prediction['label']
                 score = prediction['score']
 
-                st.subheader("Analysis Results")
                 col1, col2 = st.columns(2)
-                
-                # Display the results in columns
-                with col1:
-                    st.metric("Predicted Source", label.upper())
-                with col2:
-                    st.metric("Confidence Score", f"{score:.2%}")
+                col1.metric("Predicted Source", label.upper())
+                col2.metric("Confidence", f"{score:.2%}")
 
-                # --- 2. Configure and Call Gemini API ---
+                # 2. Gemini Call (Diagnostic Mode)
                 genai.configure(api_key=gemini_api_key)
                 
-                # UPDATED MODEL NAME HERE
-                model = genai.GenerativeModel('gemini-1.5-flash') 
+                model = None
+                # Extended list of potential names
+                model_options = [
+                    'gemini-1.5-flash', 
+                    'gemini-1.5-flash-001',
+                    'gemini-1.5-pro',
+                    'gemini-1.5-pro-001', 
+                    'gemini-1.0-pro', 
+                    'gemini-pro'
+                ]
                 
-                # Create a clear prompt for the LLM
-                prompt = f"""
-                An AI model has classified the following article as '{label}' with {score:.0%} confidence.
-                Please provide a brief, easy-to-understand explanation (in Hinglish, as if explaining to a friend) about what this classification means.
-                Also, point out any potential red flags in the text itself, based on the classification.
-
-                Article Title: {article_title}
-                Article Text: {article_text}
-                """
+                # Try to find a working model
+                for name in model_options:
+                    try:
+                        test_model = genai.GenerativeModel(name)
+                        test_model.generate_content("Hello")
+                        model = test_model
+                        # st.success(f"Connected to {name}") # Uncomment for debug
+                        break 
+                    except:
+                        continue
                 
-                response = model.generate_content(prompt)
-                
-                st.subheader("🤖 AI-Generated Explanation (from Gemini)")
-                st.info(response.text) # Display Gemini's response
+                if model is None:
+                    st.error("❌ Connection Failed. Listing AVAILABLE models for your key:")
+                    
+                    # --- DIAGNOSTIC: List all available models ---
+                    try:
+                        available_models = []
+                        for m in genai.list_models():
+                            if 'generateContent' in m.supported_generation_methods:
+                                available_models.append(m.name)
+                        
+                        if available_models:
+                            st.json(available_models)
+                            st.info("👉 Please tell me one of the names listed above.")
+                        else:
+                            st.error("No text generation models found for this API key.")
+                    except Exception as e:
+                        st.error(f"Could not list models: {e}")
+                        
+                else:
+                    prompt = f"""
+                    The article is classified as '{label}' ({score:.0%} confidence).
+                    Explain why in simple Hinglish. Point out red flags.
+                    Title: {article_title}
+                    Text: {article_text}
+                    """
+                    response = model.generate_content(prompt)
+                    st.subheader("🤖 AI Explanation")
+                    st.info(response.text)
 
             except Exception as e:
-                st.error(f"An error occurred during analysis: {e}")
-                st.error("Please check your API key and try again.") 
+                st.error(f"An error occurred: {e}")
