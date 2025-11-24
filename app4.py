@@ -4,6 +4,7 @@ import os
 import zipfile
 import re
 import google.generativeai as genai
+from PIL import Image
 
 # --- Auto-Unzip Logic ---
 model_folder = 'climatebert_model' 
@@ -42,126 +43,117 @@ st.sidebar.info("Get your free key from [Google AI Studio](https://aistudio.goog
 
 # --- Main Header ---
 st.title("🌍 Climate Intelligence Assistant")
-st.markdown("### AI-Powered Detection & Explanation of Climate Misinformation")
+st.markdown("### 🛡️ The All-in-One Climate Misinformation Detective")
+st.caption("Analyzes Text, Detects Logical Fallacies, and Debunks Misleading Images.")
 
 # Load Model
 classifier = load_classifier()
 if classifier is None: st.stop()
 
 # --- TABS LAYOUT ---
-tab1, tab2 = st.tabs(["🕵️ Analyze Content", "ℹ️ About the Project"])
+tab1, tab2 = st.tabs(["🕵️ Analyze Content (Text & Images)", "ℹ️ About the Project"])
 
 # --- TAB 1: ANALYSIS (Main Tool) ---
 with tab1:
-    st.write("Paste a news article below to check its credibility.")
+    col_left, col_right = st.columns([1, 1])
     
-    col_input1, col_input2 = st.columns([1, 2])
-    with col_input1:
-        article_title = st.text_input("Article Title", placeholder="e.g., Scientists claim...")
-    with col_input2:
-        article_text = st.text_area("Article Text", height=250, placeholder="Paste the full content here...")
+    with col_left:
+        st.subheader("1. Input Data")
+        article_title = st.text_input("Headline / Title", placeholder="e.g., New study shows ice is growing...")
+        article_text = st.text_area("Article Text", height=150, placeholder="Paste the content here...")
+        
+        st.markdown("---")
+        st.write("📷 **Upload Evidence (Optional)**")
+        uploaded_image = st.file_uploader("Upload a chart, meme, or photo to analyze", type=["jpg", "png", "jpeg"])
+        
+        if uploaded_image:
+            st.image(uploaded_image, caption="Uploaded Evidence", use_column_width=True)
 
-    analyze_btn = st.button("🔍 Analyze Credibility", type="primary", use_container_width=True)
+    with col_right:
+        st.subheader("2. AI Analysis Report")
+        analyze_btn = st.button("🚀 Run Deep Analysis", type="primary", use_container_width=True)
 
-    if analyze_btn:
-        if not article_title and not article_text:
-            st.warning("⚠️ Please enter a title or text to analyze.")
-        elif not gemini_api_key:
-            st.error("🔑 Please enter your Gemini API Key in the sidebar.")
-        else:
-            with st.spinner("🤖 Analyzing... Checking sources, detecting tone, and generating fact-checks..."):
-                try:
-                    # 1. Classification
-                    combined_text = f"{article_title} {re.sub(r'<.*?>', '', article_text)}"
-                    prediction = classifier(combined_text)[0]
-                    label = prediction['label']
-                    score = prediction['score']
-
-                    # Display Results
-                    st.divider()
-                    st.subheader("📊 Analysis Dashboard")
-                    
-                    # Metric Cards
-                    r_col1, r_col2, r_col3 = st.columns(3)
-                    r_col1.metric("Predicted Source", label.upper(), delta="ClimateBERT Model")
-                    r_col2.metric("Confidence Score", f"{score:.2%}")
-                    
-                    if label.lower() in ['junksci', 'conspiracy']:
-                        r_col3.error("⚠️ High Risk of Misinformation")
-                    else:
-                        r_col3.success("✅ Likely Credible Source")
-
-                    # 2. Gemini Call (Advanced Prompting)
-                    genai.configure(api_key=gemini_api_key)
-                    model = None
-                    model_options = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-flash-latest']
-                    
-                    for name in model_options:
-                        try:
-                            test_model = genai.GenerativeModel(name)
-                            test_model.generate_content("Hello") 
-                            model = test_model
-                            break 
-                        except:
-                            continue
-                    
-                    if model is None:
-                        st.error("Could not connect to Gemini. Please check API Key.")
-                    else:
-                        # --- NEW: Advanced Prompt for More Features ---
-                        prompt = f"""
-                        The article is classified as '{label}' ({score:.0%} confidence).
+        if analyze_btn:
+            if not gemini_api_key:
+                st.error("🔑 Please enter your Gemini API Key in the sidebar.")
+            elif not article_title and not article_text and not uploaded_image:
+                st.warning("⚠️ Please provide at least Text OR an Image to analyze.")
+            else:
+                with st.spinner("🤖 Processing... Detecting fallacies & analyzing visuals..."):
+                    try:
+                        # --- A. Text Classification (ClimateBERT) ---
+                        # Only run BERT if there is text
+                        label = "N/A"
+                        score = 0.0
                         
-                        Please provide a response with exactly these three sections:
+                        if article_text or article_title:
+                            combined_text = f"{article_title} {re.sub(r'<.*?>', '', article_text)}"
+                            # Truncate for BERT if too long (simple fix)
+                            prediction = classifier(combined_text[:512])[0] 
+                            label = prediction['label']
+                            score = prediction['score']
+
+                        # --- B. Gemini Call (Multimodal) ---
+                        genai.configure(api_key=gemini_api_key)
+                        model = genai.GenerativeModel('gemini-2.0-flash') # 2.0 Flash supports images well
                         
-                        1. **Tone Analysis:** (Is it Alarmist, Neutral, Scientific, or Aggressive? Explain in 1 sentence).
-                        2. **Explanation:** (Explain WHY it was classified as {label} in simple Hinglish).
-                        3. **Fact-Check Queries:** (Give 2 bullet points of what the user should Google to verify this information).
+                        # Construct inputs for Gemini
+                        inputs = []
                         
-                        Title: {article_title}
+                        # The Prompt
+                        prompt_text = f"""
+                        You are an expert Climate Misinformation Analyst. Analyze the following inputs.
+                        
+                        Context from BERT Classifier: Predicted Source = {label} ({score:.0%} Confidence).
+                        
+                        Please generate a report with these sections:
+                        1. **Verdict:** (Credible, Misleading, or Mixed? Start with an Emoji).
+                        2. **Logical Fallacy Check:** (Did the text use Strawman, Cherry Picking, or Ad Hominem? Explain).
+                        3. **Visual Analysis:** (If an image is provided: Is the graph misleading? Is the photo out of context? If no image, skip this).
+                        4. **Correction:** (Correct the misinformation with scientific facts).
+                        
+                        Headline: {article_title}
                         Text: {article_text}
                         """
-                        response = model.generate_content(prompt)
+                        inputs.append(prompt_text)
                         
+                        # Add image if exists
+                        if uploaded_image:
+                            img = Image.open(uploaded_image)
+                            inputs.append(img)
+                        
+                        # Generate
+                        response = model.generate_content(inputs)
+                        
+                        # --- Display Results ---
+                        
+                        # 1. Metrics Row
+                        if label != "N/A":
+                            m_col1, m_col2 = st.columns(2)
+                            m_col1.metric("BERT Classification", label.upper())
+                            m_col2.metric("Confidence", f"{score:.2%}")
+                        
+                        # 2. Gemini Analysis
                         st.info(response.text)
                         
-                        # --- NEW: Download Report Button ---
-                        report_text = f"""
-                        CLIMATE INTELLIGENCE REPORT
-                        ---------------------------
-                        Title: {article_title}
-                        Predicted Source: {label}
-                        Confidence: {score:.2%}
-                        
-                        AI Analysis:
-                        {response.text}
-                        """
+                        # 3. Download Report
                         st.download_button(
-                            label="📥 Download Analysis Report",
-                            data=report_text,
-                            file_name="climate_analysis_report.txt",
-                            mime="text/plain"
+                            "📥 Download Full Report",
+                            data=response.text,
+                            file_name="climate_investigation.txt"
                         )
 
-                except Exception as e:
-                    st.error(f"An error occurred: {e}")
+                    except Exception as e:
+                        st.error(f"Analysis Error: {e}")
 
-# --- TAB 2: ABOUT (Project Info) ---
+# --- TAB 2: ABOUT ---
 with tab2:
-    st.header("About this Project")
+    st.header("About this Product")
     st.markdown("""
-    **Climate Intelligence Assistant** is a hybrid AI tool designed to combat climate change misinformation.
+    **Climate Intelligence Assistant** is a next-generation forensic tool for digital media.
     
-    #### 🛠️ How it Works:
-    1.  ** Discriminative AI (ClimateBERT):** * We fine-tuned a `distilroberta-base` model specifically on climate data.
-        * It classifies text into 4 categories: `Scientific`, `News`, `Junk Science`, `Conspiracy`.
-        * Achieved **100% Accuracy** on our validation set.
-    
-    2.  ** Generative AI (Google Gemini):**
-        * The classification label is sent to Google's Gemini 2.0 Flash model.
-        * It generates a human-readable explanation in **Hinglish** to help users understand *why* an article is fake or real.
-        
-    #### 🎓 Created By:
-    * Department of Computer Science & Engineering (AI & DS)
-    * **Shree Siddheshwar Women’s College of Engineering, Solapur**
+    #### ✨ Key Features:
+    * **🧠 Hybrid Intelligence:** Combines specialized discriminative AI (ClimateBERT) with Generative Reasoning (Gemini).
+    * **👁️ Visual Forensics:** Capable of analyzing misleading graphs, fake memes, and out-of-context photos using Computer Vision.
+    * **🕵️ Fallacy Detector:** Goes beyond "True/False" to explain the *manipulation tactics* used (e.g., Cherry Picking data).
     """)
