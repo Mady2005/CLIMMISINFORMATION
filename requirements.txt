@@ -9,3 +9,5 @@ pillow
 pypdf
 sentence-transformers
 textblob
+plotly
+duckduckgo-search
